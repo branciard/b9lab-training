@@ -6,12 +6,6 @@ import "../contracts/Splitter.sol";
 
 contract TestSplitter {
 
-  function testNotNullOwnerUsingDeployedContract() {
-    Splitter meta = Splitter(DeployedAddresses.Splitter());
-
-    Assert.notEqual(meta.owner(), address(0), "owner of the contract must be assigned");
-  }
-
   function testNotNullReceiver1UsingDeployedContract() {
     Splitter meta = Splitter(DeployedAddresses.Splitter());
 
@@ -33,7 +27,7 @@ contract TestSplitter {
 
   function testSplitCallWithoutValueFailed() {
     Splitter meta = new Splitter(address(1),address(2));
-    Assert.equal(meta.split(), false, "Split Call Without Value must Failed");
+    Assert.isFalse(meta.split(), "Split Call Without Value must Failed");
   }
 
 

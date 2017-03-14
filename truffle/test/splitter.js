@@ -1,159 +1,102 @@
 var Splitter = artifacts.require("./Splitter.sol");
-
-// Found here https://gist.github.com/xavierlepretre/88682e871f4ad07be4534ae560692ee6
-web3.eth.getTransactionReceiptMined = function (txnHash, interval) {
-  var transactionReceiptAsync;
-  interval = interval ? interval : 500;
-  transactionReceiptAsync = function(txnHash, resolve, reject) {
-    try {
-      var receipt = web3.eth.getTransactionReceipt(txnHash);
-      if (receipt == null) {
-        setTimeout(function () {
-          transactionReceiptAsync(txnHash, resolve, reject);
-        }, interval);
-      } else {
-        resolve(receipt);
-      }
-    } catch(e) {
-      reject(e);
-    }
-  };
-
-  return new Promise(function (resolve, reject) {
-      transactionReceiptAsync(txnHash, resolve, reject);
-  });
-};
-
-// Found here https://gist.github.com/xavierlepretre/afab5a6ca65e0c52eaf902b50b807401
-var getEventsPromise = function (myFilter, count) {
-  return new Promise(function (resolve, reject) {
-    count = count ? count : 1;
-    var results = [];
-    myFilter.watch(function (error, result) {
-      if (error) {
-        reject(error);
-      } else {
-        count--;
-        results.push(result);
-      }
-      if (count <= 0) {
-        resolve(results);
-        myFilter.stopWatching();
-      }
-    });
-  });
-};
-
-// Found here https://gist.github.com/xavierlepretre/d5583222fde52ddfbc58b7cfa0d2d0a9
-var expectedExceptionPromise = function (action, gasToUse) {
-  return new Promise(function (resolve, reject) {
-      try {
-        resolve(action());
-      } catch(e) {
-        reject(e);
-      }
-    })
-    .then(function (txn) {
-      return web3.eth.getTransactionReceiptMined(txn);
-    })
-    .then(function (receipt) {
-      // We are in Geth
-      assert.equal(receipt.gasUsed, gasToUse, "should have used all the gas");
-    })
-    .catch(function (e) {
-      if ((e + "").indexOf("invalid JUMP") > -1) {
-        // We are in TestRPC
-      } else {
-        throw e;
-      }
-    });
-};
+//extensions.js : credit to : https://github.com/coldice/dbh-b9lab-hackathon/blob/development/truffle/utils/extensions.js
+const Extensions = require("../utils/extensions.js");
+Extensions.init(web3, assert);
 
 contract('Splitter', function(accounts) {
-  it("contract should have 0 balance at start", function() {
-    return Splitter.deployed().then(function(instance) {
-      return instance.address;
-    }).then(function(address) {
-      assert.equal(web3.eth.getBalance(address), 0, "contract should have 0 balance at start");
+
+  var owner, receiver1, receiver2;
+
+    before("should prepare accounts", function() {
+        assert.isAtLeast(accounts.length, 3, "should have at least 3 accounts");
+        owner = accounts[0];
+        receiver1 = accounts[1];
+        receiver2 = accounts[2];
+        return Extensions.makeSureAreUnlocked(
+                [ owner ])
+                .then(() => web3.eth.getBalancePromise(owner))
+                          .then(balance => assert.isTrue(
+                          web3.toWei(web3.toBigNumber(1), "ether").lessThan(balance),
+                          "should have at least 1 ether, not " + web3.fromWei(balance, "ether")));
+
     });
+
+ it("contract should have 0 balance at start", function() {
+    return Splitter.deployed()
+    .then( instance => instance.address )
+    .then( address  => web3.eth.getBalancePromise(address))
+    .then( balance  => assert.strictEqual(balance.toString(16), '0', "contract should have 0 balance at start"));
  });
 
-  it("it should split the 4 ether into 2 ethers for each receiver accounts[1] and accounts[2]", function() {
-    var accounts1BeforeSplit=web3.fromWei(web3.eth.getBalance(web3.eth.accounts[1]),'ether').toNumber();
-    var accounts2BeforeSplit=web3.fromWei(web3.eth.getBalance(web3.eth.accounts[2]),'ether').toNumber();
-    return Splitter.deployed().then(function(instance) {
-      meta = instance;
-      return meta.split({from:web3.eth.accounts[0],value:web3.toWei(4,'ether')});
-    }).then(function(result) {
-      var accounts1AfterSplit=web3.fromWei(web3.eth.getBalance(web3.eth.accounts[1]),'ether').toNumber();
-      var accounts2AfterSplit=web3.fromWei(web3.eth.getBalance(web3.eth.accounts[2]),'ether').toNumber();
-      assert.equal(accounts1BeforeSplit+2,accounts1AfterSplit,"accounts1 must have receive 2 ethers");
-      assert.equal(accounts2BeforeSplit+2,accounts2AfterSplit,"accounts2 must have receive 2 ethers");
-    });
-  });
+  describe("Regular actions", function() {
 
-  it("it should be able to split 5 ether into 2.5 for each", function() {
-    var accounts1BeforeSplit=web3.fromWei(web3.eth.getBalance(web3.eth.accounts[1]),'ether').toNumber();
-    var accounts2BeforeSplit=web3.fromWei(web3.eth.getBalance(web3.eth.accounts[2]),'ether').toNumber();
-    return Splitter.deployed().then(function(instance) {
-      meta = instance;
-      return meta.split({from:web3.eth.accounts[0],value:web3.toWei(5,'ether')});
-    }).then(function(result) {
-      var accounts1AfterSplit=web3.fromWei(web3.eth.getBalance(web3.eth.accounts[1]),'ether').toNumber();
-      var accounts2AfterSplit=web3.fromWei(web3.eth.getBalance(web3.eth.accounts[2]),'ether').toNumber();
-      assert.equal(accounts1BeforeSplit+2.5,accounts1AfterSplit,"accounts1 must have receive 2.5 ethers");
-      assert.equal(accounts2BeforeSplit+2.5,accounts2AfterSplit,"accounts2 must have receive 2.5 ethers");
-    });
-  });
+    var splitterInstance;
+    var receiver1InitialBalance;
+    var receiver2InitialBalance;
 
-  it("it should be able to split 0000000000000000004 wei into 2 parts of 0000000000000000002 wei", function() {
-    var accounts1BeforeSplit=web3.eth.getBalance(web3.eth.accounts[1]).toNumber();
-    var accounts2BeforeSplit=web3.eth.getBalance(web3.eth.accounts[2]).toNumber();
-    return Splitter.deployed().then(function(instance){
-      meta = instance;
-      return meta.split({from:web3.eth.accounts[0],value:0000000000000000004});
-    }).then(function(result) {
-      var accounts1AfterSplit=web3.eth.getBalance(web3.eth.accounts[1]).toNumber();
-      var accounts2AfterSplit=web3.eth.getBalance(web3.eth.accounts[2]).toNumber();
-      assert.equal(accounts1BeforeSplit+0000000000000000002,accounts1AfterSplit,"accounts1 must have receive 0000000000000000002 wei");
-      assert.equal(accounts2BeforeSplit+0000000000000000002,accounts2AfterSplit,"accounts2 must have receive 0000000000000000002 wei");
+    beforeEach("should collect user 1 and user 2 intial balance and instanciate the splitter", function() {
+        return web3.eth.getBalancePromise(receiver1)
+        .then(balance => {
+             receiver1InitialBalance =balance;
+             return web3.eth.getBalancePromise(receiver2);
+          })
+        .then(balance => {
+          receiver2InitialBalance=balance;
+          return Splitter.deployed();
+          })
+        .then(instance => {splitterInstance = instance;} );
     });
+
+  it("it should split the 4 wei into 2 wei for each receiver receiver1 and receiver2", function() {
+      return splitterInstance.split.call({from:owner,value:4})
+     .then(successful => {
+        assert.isTrue(successful, "should be possible to call split");
+        return splitterInstance.split({from:owner,value:4, gas: 3000000});
+      })
+     .then(txObject => {
+        assert.isBelow(txObject.receipt.gasUsed, 3000000, "should not use all gas");
+        return web3.eth.getBalancePromise(receiver1);
+      })
+     .then( receiver1CurrentBalance => {
+         assert.strictEqual(receiver1CurrentBalance.minus(2).toString(16), receiver1InitialBalance.toString(16) , "receiver1 must receive 2 wei");
+         return web3.eth.getBalancePromise(receiver2);
+     })
+     .then( receiver2CurrentBalance => {
+       assert.strictEqual(receiver2CurrentBalance.minus(2).toString(16), receiver2InitialBalance.toString(16) , "receiver2 must receive 2 wei");
+       return web3.eth.getBalancePromise(splitterInstance.address);
+     })
+     .then( splitterInstanceCurrentBalance => {
+       assert.strictEqual(splitterInstanceCurrentBalance.toString(16), '0', "contract should have 0 balance at the end");
+     });
+  });
+});
+
+describe("Irregular actions", function() {
+    var splitterInstance;
+
+  beforeEach("should instanciate the Splitter", function() {
+      return Splitter.deployed().then(instance => {splitterInstance = instance;} );
   });
 
   it("it should failed to split 0000000000000000003 wei into 2 parts. ", function() {
-    var accounts1BeforeSplit=web3.eth.getBalance(web3.eth.accounts[1]).toNumber();
-    var accounts2BeforeSplit=web3.eth.getBalance(web3.eth.accounts[2]).toNumber();
-    return Splitter.deployed().then(function(instance){
-      meta = instance;
-      return expectedExceptionPromise(function () {
-  			return meta.split({from:web3.eth.accounts[0],value:0000000000000000003, gas: 3000000 });
+      return Extensions.expectedExceptionPromise(function () {
+  			return splitterInstance.split({from:owner,value:3, gas: 3000000 });
   	    },
   	    3000000);
-    })
   });
 
-  it("it should failed to call split function if not account[0] ( owner ) ", function() {
-    var accounts1BeforeSplit=web3.eth.getBalance(web3.eth.accounts[1]).toNumber();
-    var accounts2BeforeSplit=web3.eth.getBalance(web3.eth.accounts[2]).toNumber();
-    return Splitter.deployed().then(function(instance){
-      meta = instance;
-      return expectedExceptionPromise(function () {
-        return meta.split({from:web3.eth.accounts[1],value:0000000000000000004, gas: 3000000 });
+  it("it should failed to call split function if not owner ", function() {
+      return Extensions.expectedExceptionPromise(function () {
+        return splitterInstance.split({from:receiver1,value:4, gas: 3000000 });
         },
         3000000);
-    })
   });
 
-    it("it should failed to call kill function if not account[0] ( owner ) ", function() {
-      var accounts1BeforeSplit=web3.eth.getBalance(web3.eth.accounts[1]).toNumber();
-      var accounts2BeforeSplit=web3.eth.getBalance(web3.eth.accounts[2]).toNumber();
-      return Splitter.deployed().then(function(instance){
-        meta = instance;
-        return expectedExceptionPromise(function () {
-          return meta.kill({from:web3.eth.accounts[1], gas: 3000000 });
+    it("it should failed to call kill function if not owner ", function() {
+        return Extensions.expectedExceptionPromise(function () {
+          return splitterInstance.kill({from:receiver1, gas: 3000000 });
           },
           3000000);
-      })
     });
-
+  });
 });
