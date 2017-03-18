@@ -1,23 +1,21 @@
 var Splitter = artifacts.require("./Splitter");
 
+//https://gist.github.com/xavierlepretre/ed82f210df0f9300493d5ca79893806a#file-getaccountspromise-js
+web3.eth.getAccountsPromise = function () {
+    return new Promise(function (resolve, reject) {
+        web3.eth.getAccounts(function (e, accounts) {
+            if (e != null) {
+                reject(e);
+            } else {
+                resolve(accounts);
+            }
+        });
+    });
+};
+
 module.exports = function(deployer) {
-deployer.deploy(Splitter,web3.eth.accounts[1],web3.eth.accounts[2]);
 
-/*deployer.then(function() {
-  return web3.eth.getAccounts;
-}).then(function (accounts) {
-  account1=accounts[1];
-  account2=accounts[2];
-  deployer.deploy(Splitter,account1,account2);
-});
-
-it gives error :
-
-Saving successful migration to network...
-(node:22868) UnhandledPromiseRejectionWarning: Unhandled promise
-rejection (rejection id: 1): TypeError: Cannot convert undefined or null to object
-Saving artifacts...
-
-*/
+deployer.then(() => web3.eth.getAccountsPromise())
+        .then(accounts =>  deployer.deploy(Splitter,accounts[1],accounts[2]));
 
 };

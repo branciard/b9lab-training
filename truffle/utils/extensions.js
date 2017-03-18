@@ -1,5 +1,6 @@
-// credit to : https://github.com/coldice/dbh-b9lab-hackathon/blob/development/truffle/utils/extensions.js 
+// credit to : https://github.com/coldice/dbh-b9lab-hackathon/blob/development/truffle/utils/extensions.js
 module.exports = {
+
     init: function (web3, assert) {
         // From https://gist.github.com/xavierlepretre/88682e871f4ad07be4534ae560692ee6
         web3.eth.getTransactionReceiptMined = function (txnHash, interval) {
@@ -35,7 +36,7 @@ module.exports = {
             }
         };
 
-        // From https://gist.github.com/xavierlepretre/90f0feafccc07b267e44a87050b95caa 
+        // From https://gist.github.com/xavierlepretre/90f0feafccc07b267e44a87050b95caa
         promisify = function (web3) {
             // Pipes values from a Web3 callback.
             var callbackToResolve = function (resolve, reject) {
@@ -92,8 +93,8 @@ module.exports = {
             // all zeroes could be a valid address. But: This catches all
             // those cases where Ethereum returns 0x0000... if something fails.
             var number = web3.toBigNumber(txnHash, 16);
-            assert(number.equals(0) === false, 
-                'expected address #{txnHash} to not be zero', 
+            assert(number.equals(0) === false,
+                'expected address #{txnHash} to not be zero',
                 'you shouldn\'t ever see this.');
         };
     },
@@ -148,18 +149,21 @@ module.exports = {
                 }
             })
             .then(function (txnHash) {
-                assert.isTxHash(txnHash, "it should have thrown");
-                return web3.eth.getTransactionReceiptMined(txnHash);
+                assert.isTxHash(txnHash.tx, "it should have thrown");
+                return web3.eth.getTransactionReceiptMined(txnHash.tx);
             })
             .then(function (receipt) {
                 // We are in Geth
+                console.log("Geth mode : run out of gas. throw expected ?");
                 assert.equal(receipt.gasUsed, gasToUse, "should have used all the gas");
             })
             .catch(function (e) {
                 if ((e + "").indexOf("invalid JUMP") > -1 || (e + "").indexOf("out of gas") > -1) {
                     // We are in TestRPC
+                    console.log("TestRPC mode : invalid JUMP or out of gas detected")
                 } else if ((e + "").indexOf("please check your gas amount") > -1) {
                     // We are in Geth for a deployment
+                    console.log("Geth mode : deployment in progress ...")
                 } else {
                     throw e;
                 }
@@ -175,24 +179,6 @@ module.exports = {
                     resolve(toPassOn);
                 }, timeOut);
         });
-    },
-
-    makeSureHasAtLeast: function (richAccount, recipients, wei) {
-        var requests = [];
-        recipients.forEach(function (recipient) {
-            requests.push(web3.eth.getBalancePromise(recipient)
-                .then(function (balance) {
-                    if (balance.lessThan(wei)) {
-                        return web3.eth.sendTransactionPromise({
-                            from: richAccount,
-                            to: recipient,
-                            value: wei
-                        });
-                    }
-                })
-            );
-        });
-        return requests;
     },
 
     makeSureAreUnlocked: function (accounts) {
@@ -211,5 +197,4 @@ module.exports = {
         });
         return Promise.all(requests);
     }
-
 };
