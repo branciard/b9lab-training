@@ -53,6 +53,7 @@ contract('Splitter', function(accounts) {
     var splitterInstance;
     var receiver1InitialBalance;
     var receiver2InitialBalance;
+    var blocknumber;
 
     beforeEach("should collect user 1 and user 2 intial balance and Retrieve the deployed Splitter instance", function() {
         return web3.eth.getBalancePromise(receiver1)
@@ -77,13 +78,25 @@ contract('Splitter', function(accounts) {
         return splitterInstance.split.call({from:owner,value:4})
         .then(successful => {
           assert.isTrue(successful, "should be possible to call split");
+          //needed for split event filter
+          blocknumber = web3.eth.blocknumber +1;
           return splitterInstance.split({from:owner,value:4, gas: 3000000});
         })
         .then(txSent => {
-          return web3.eth.getTransactionReceiptMined(txSent.tx);
+          return Promise.all([
+             Extensions.getEventsPromise(splitterInstance.LogSplit({},{fromBlock:blocknumber,toBlock:"latest"})),
+             web3.eth.getTransactionReceiptMined(txSent.tx),
+            ]);
         })
-       .then(txMined => {
+       .then(txMinedAndEventFiltered => {
+          eventFiltered =txMinedAndEventFiltered[0];
+          txMined= txMinedAndEventFiltered[1];
           assert.isBelow(txMined.gasUsed, 3000000, "should not use all gas");
+          //check LogSplit event
+          assert.strictEqual(eventFiltered[0].args.amountReceive.valueOf(),'2', "check amountReceivelog log event. must be 2");
+          assert.strictEqual(eventFiltered[0].args.sender,owner, "check sender log event. must be the owner");
+          assert.strictEqual(eventFiltered[0].args.receiver1,receiver1, "check receiver1 log event");
+          assert.strictEqual(eventFiltered[0].args.receiver2,receiver2, "check receiver2 log event");
           return Promise.all([
   	    		web3.eth.getBalancePromise(receiver1),
   	    		web3.eth.getBalancePromise(receiver2),

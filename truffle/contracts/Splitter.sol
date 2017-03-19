@@ -5,6 +5,7 @@ contract Splitter is Killable {
   address public receiver1;
   address public receiver2;
   uint private splittedValue;
+  event LogSplit(address indexed sender,address indexed receiver1, address indexed receiver2,uint256 amountReceive);
 
   function Splitter ( address _receiver1, address _receiver2){
     //check _receiver1 or _receiver1 are not the owner
@@ -44,6 +45,7 @@ contract Splitter is Killable {
       if (! receiver2.send(splittedValue)){
         throw;
       }
+      LogSplit(owner,receiver1,receiver2,splittedValue);
       return true;
     }
     else{
