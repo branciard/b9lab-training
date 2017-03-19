@@ -1,11 +1,21 @@
 pragma solidity ^0.4.4;
 import 'zeppelin/lifecycle/Killable.sol';
-contract Splitter is Killable {
+import './Mutex.sol';
+
+contract Splitter is Killable, Mutex{
 
   address public receiver1;
   address public receiver2;
-  uint private splittedValue;
+  uint internal splittedValue;
   event LogSplit(address indexed sender,address indexed receiver1, address indexed receiver2,uint256 amountReceive);
+
+  modifier onlySplittableValue(uint splittedValueToCheck) {
+    if (! (( splittedValueToCheck + splittedValueToCheck ) == msg.value )){
+      //value sent is not splittable... (remaining amount will stay in contract. so throw...)
+     throw;
+    }
+    _;
+  }
 
   function Splitter ( address _receiver1, address _receiver2){
     //check _receiver1 or _receiver1 are not the owner
@@ -30,15 +40,11 @@ contract Splitter is Killable {
      receiver2 = _receiver2;
   }
 
-  function split() payable onlyOwner returns (bool)  {
+  function split() payable onlyOwner noReentrancy onlySplittableValue(msg.value / 2) returns (bool)  {
     if(msg.value > 0){
 
       splittedValue = msg.value / 2;
 
-      if (! (( splittedValue + splittedValue ) == msg.value )){
-        //value sent is not splittable... (remaining amount will stay in contract. so throw...)
-       throw;
-      }
       if (! receiver1.send(splittedValue)){
         throw;
       }

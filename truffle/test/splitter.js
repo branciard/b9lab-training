@@ -71,7 +71,7 @@ contract('Splitter', function(accounts) {
 
     it("contract should have 0 balance at start", function() {
          return web3.eth.getBalancePromise(splitterInstance.address)
-         .then( balance  => assert.strictEqual(balance.toString(16), '0', "contract should have 0 balance at start"));
+         .then( balance  => assert.strictEqual(balance.toString(10), '0', "contract should have 0 balance at start"));
     });
 
     it("it should split the 4 wei into 2 wei for each receiver receiver1 and receiver2", function() {
@@ -107,9 +107,9 @@ contract('Splitter', function(accounts) {
            receiver1CurrentBalance=currentBalance[0];
            receiver2CurrentBalance=currentBalance[1];
            splitterInstanceCurrentBalance=currentBalance[2];
-           assert.strictEqual(receiver1CurrentBalance.minus(2).toString(16), receiver1InitialBalance.toString(16) , "receiver1 must receive 2 wei");
-           assert.strictEqual(receiver2CurrentBalance.minus(2).toString(16), receiver2InitialBalance.toString(16) , "receiver2 must receive 2 wei");
-           assert.strictEqual(splitterInstanceCurrentBalance.toString(16), '0', "contract should have 0 balance at the end");
+           assert.strictEqual(receiver1CurrentBalance.minus(2).toString(10), receiver1InitialBalance.toString(10) , "receiver1 must receive 2 wei");
+           assert.strictEqual(receiver2CurrentBalance.minus(2).toString(10), receiver2InitialBalance.toString(10) , "receiver2 must receive 2 wei");
+           assert.strictEqual(splitterInstanceCurrentBalance.toString(10), '0', "contract should have 0 balance at the end");
        });
     });
 
@@ -186,8 +186,8 @@ describe("Irregular actions", function() {
               receiver1CurrentBalance=currentBalance[0];
               receiver2CurrentBalance=currentBalance[1];
               // Phew! : split must not work properly because the contract is killed. expected balance the same as before the split call
-              assert.strictEqual(receiver1CurrentBalance.toString(16), receiver1InitialBalance.toString(16) , "receiver1 must not receive 2 wei");
-              assert.strictEqual(receiver2CurrentBalance.toString(16), receiver2InitialBalance.toString(16) , "receiver2 must not receive 2 wei");
+              assert.strictEqual(receiver1CurrentBalance.toString(10), receiver1InitialBalance.toString(10) , "receiver1 must not receive 2 wei");
+              assert.strictEqual(receiver2CurrentBalance.toString(10), receiver2InitialBalance.toString(10) , "receiver2 must not receive 2 wei");
           });
     });
   });

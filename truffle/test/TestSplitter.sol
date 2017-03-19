@@ -6,17 +6,7 @@ import "../contracts/Splitter.sol";
 
 contract TestSplitter {
 
-  function testNotNullReceiver1UsingDeployedContract() {
-    Splitter meta = Splitter(DeployedAddresses.Splitter());
 
-    Assert.notEqual(meta.receiver1(), address(0), "receiver1 must be assigned");
-  }
-
-  function testNotNullReceiver2UsingDeployedContract() {
-    Splitter meta = Splitter(DeployedAddresses.Splitter());
-
-    Assert.notEqual(meta.receiver2(), address(1), "receiver2 must be assigned");
-  }
 
   function testOwnerReceiver1Receiver2() {
     Splitter meta = new Splitter(address(1),address(2));
