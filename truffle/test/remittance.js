@@ -146,7 +146,7 @@ contract('Remittance', function(accounts) {
         web3.sha3("No problem can be solved from the same level of consciousness that created it."),
         receiver,
         86400  ,//86400 sec = 1 day
-        {from:giver,value:4})
+        {from:giver,value:4, gas: 3000000})
       .then(txMined => {
           assert.isBelow(txMined.receipt.gasUsed, 3000000, "should not use all gas");
           return remittanceInstance.currentRemittanceState.call();
@@ -315,7 +315,7 @@ contract('Remittance', function(accounts) {
           web3.sha3("No problem can be solved from the same level of consciousness that created it."),
           receiver,
           5  ,//5 seconds
-          {from:giver,value:4})
+          {from:giver,value:4, gas: 3000000})
         )
         .then(txMined => assert.isBelow(txMined.receipt.gasUsed, 3000000, "should not use all gas"))
         .then(()=> Promise.all([
