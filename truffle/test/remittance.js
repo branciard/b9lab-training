@@ -543,12 +543,7 @@ contract('Remittance', function(accounts) {
         .then(currentRemittanceStateCall =>   assert.strictEqual(currentRemittanceStateCall.toString(10),"0","should have go back in noGiverChallenge state (enum RemittanceState giverChallengeProcessing = 0)"));
    });
 
-   it("At this giverChallengeProcessing state, giver can't call immediatly claimBackChallenge for a timeout challenge set to 5 seconds", function() {
-     return Extensions.expectedExceptionPromise(function () {
-       return remittanceInstance.claimBackChallenge({from:giver, gas: 3000000});
-      },
-      3000000);
-    });
+
 
    it("At this giverChallengeProcessing state, owner can't call claimBackChallenge after the challenge timeout", function() {
          console.log("wait 10 seconds burning cpu")
@@ -592,6 +587,43 @@ contract('Remittance', function(accounts) {
           3000000);
       });
 
+    });
+
+
+
+      describe("Test with long time out", function() {
+
+        var remittanceInstance;
+        var giverInitialBalance;
+        var receiverInitialBalance;
+
+
+        beforeEach("should collect giver and receiver intial balance and create a new instance", function() {
+          return Remittance.new(giver,oneWeek)
+            .then(result => remittanceInstance =result)
+            .then(()=>remittanceInstance.launchChallenge(
+              web3.sha3("No problem can be solved from the same level of consciousness that created it."),
+              receiver,
+              500  ,//500 seconds
+              {from:giver,value:4, gas: 3000000})
+            )
+            .then(txMined => assert.isBelow(txMined.receipt.gasUsed, 3000000, "should not use all gas"))
+            .then(()=> Promise.all([
+               web3.eth.getBalancePromise(giver),
+               web3.eth.getBalancePromise(receiver),
+             ]))
+            .then(balance => {
+              giverInitialBalance=balance[0];
+              receiverInitialBalance=balance[1];
+            });
+        });
+
+        it("At this giverChallengeProcessing state, giver can't call immediatly claimBackChallenge for a timeout challenge set to 500 seconds", function() {
+          return Extensions.expectedExceptionPromise(function () {
+            return remittanceInstance.claimBackChallenge({from:giver, gas: 3000000});
+           },
+           3000000);
+         });
     });
 
 });

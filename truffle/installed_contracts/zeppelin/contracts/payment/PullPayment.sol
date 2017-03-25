@@ -7,7 +7,7 @@ pragma solidity ^0.4.8;
  * Inherit from this contract and use asyncSend instead of send.
  */
 contract PullPayment {
-  mapping(address => uint) public payments;
+  mapping(address => uint) internal payments;
 
   // store sent amount as credit to be pulled, called by payer
   function asyncSend(address dest, uint amount) internal {
@@ -18,7 +18,7 @@ contract PullPayment {
   function withdrawPayments() {
     address payee = msg.sender;
     uint payment = payments[payee];
-    
+
     if (payment == 0) {
       throw;
     }
