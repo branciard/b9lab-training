@@ -20,32 +20,8 @@ contract('Splitter', function(accounts) {
                           web3.toWei(web3.toBigNumber(2), "ether").lessThan(balance),
                           "owner should have at least 2 ether, not " + web3.fromWei(balance, "ether"))
                 )
-                .then(() => {
-                  return web3.eth.getBalancePromise(receiver1)
-                })
-                // give some ether to receiver1. Needed for Irregular test
-                .then(balance => {
-                  //check if has 1 ether. if not sent 1 to him
-                    if(balance.lessThan(web3.toWei(web3.toBigNumber(1), "ether"))){
-                        return web3.eth.sendTransactionPromise({
-                            from: owner,
-                            to: receiver1,
-                            value: web3.toWei(web3.toBigNumber(1), "ether")
-                        });
-                    }
-               })
-               .then( txSent =>  {
-                  // if sendTransactionPromise has been call. sent wait for mining
-                  if(txSent){
-                  return web3.eth.getTransactionReceiptMined(txSent);
-                 }
-                }).then(txMined=> {
-                  // check that receiver1 balance is now OK
-                  return web3.eth.getBalancePromise(receiver1)
-                })
-                .then(balance => assert.isTrue(
-                        web3.toWei(web3.toBigNumber(0.99), "ether").lessThan(balance),
-                        "receiver1 should have at least 1 ether, not " + web3.fromWei(balance, "ether")));
+                .then(() => Extensions.refillAccount(owner,receiver1,1))
+                .then(() => Extensions.refillAccount(owner,receiver2,1));
     });
 
   describe("Regular actions", function() {
@@ -53,20 +29,18 @@ contract('Splitter', function(accounts) {
     var splitterInstance;
     var receiver1InitialBalance;
     var receiver2InitialBalance;
-    var blocknumber;
 
     beforeEach("should collect user 1 and user 2 intial balance and Retrieve the deployed Splitter instance", function() {
-        return web3.eth.getBalancePromise(receiver1)
-        .then(balance => {
-             receiver1InitialBalance =balance;
-             return web3.eth.getBalancePromise(receiver2);
-          })
-        .then(balance => {
-          receiver2InitialBalance=balance;
-          //new Splitter instance created each time. because some test should kill it sometimes ...
-          return Splitter.new(receiver1,receiver2);
-          })
-        .then(instance => {splitterInstance = instance;} );
+      return Promise.all([
+        web3.eth.getBalancePromise(receiver1),
+        web3.eth.getBalancePromise(receiver2),
+        Splitter.new(receiver1,receiver2)
+      ])
+      .then(result => {
+        receiver1InitialBalance=result[0];
+        receiver2InitialBalance=result[1];
+        splitterInstance =result[2];
+      });
     });
 
     it("contract should have 0 balance at start", function() {
@@ -78,25 +52,15 @@ contract('Splitter', function(accounts) {
         return splitterInstance.split.call({from:owner,value:4})
         .then(successful => {
           assert.isTrue(successful, "should be possible to call split");
-          //needed for split event filter
-          blocknumber = web3.eth.blocknumber +1;
           return splitterInstance.split({from:owner,value:4, gas: 3000000});
         })
-        .then(txSent => {
-          return Promise.all([
-             Extensions.getEventsPromise(splitterInstance.LogSplit({},{fromBlock:blocknumber,toBlock:"latest"})),
-             web3.eth.getTransactionReceiptMined(txSent.tx),
-            ]);
-        })
-       .then(txMinedAndEventFiltered => {
-          eventFiltered =txMinedAndEventFiltered[0];
-          txMined= txMinedAndEventFiltered[1];
-          assert.isBelow(txMined.gasUsed, 3000000, "should not use all gas");
+        .then(txMined => {
+          assert.isBelow(txMined.receipt.gasUsed, 3000000, "should not use all gas");
           //check LogSplit event
-          assert.strictEqual(eventFiltered[0].args.amountReceive.valueOf(),'2', "check amountReceivelog log event. must be 2");
-          assert.strictEqual(eventFiltered[0].args.sender,owner, "check sender log event. must be the owner");
-          assert.strictEqual(eventFiltered[0].args.receiver1,receiver1, "check receiver1 log event");
-          assert.strictEqual(eventFiltered[0].args.receiver2,receiver2, "check receiver2 log event");
+          assert.strictEqual(txMined.logs[0].args.amountReceive.toNumber(),2, "check amountReceivelog log event. must be 2");
+          assert.strictEqual(txMined.logs[0].args.sender,owner, "check sender log event. must be the owner");
+          assert.strictEqual(txMined.logs[0].args.receiver1,receiver1, "check receiver1 log event");
+          assert.strictEqual(txMined.logs[0].args.receiver2,receiver2, "check receiver2 log event");
           return Promise.all([
   	    		web3.eth.getBalancePromise(receiver1),
   	    		web3.eth.getBalancePromise(receiver2),
@@ -127,17 +91,16 @@ describe("Irregular actions", function() {
   var receiver2InitialBalance;
 
   beforeEach("should collect user 1 and user 2 intial balance and Retrieve the deployed Splitter instance", function() {
-      return web3.eth.getBalancePromise(receiver1)
-      .then(balance => {
-           receiver1InitialBalance =balance;
-           return web3.eth.getBalancePromise(receiver2);
-        })
-      .then(balance => {
-        receiver2InitialBalance=balance;
-        //new Splitter instance created each time. because some test should kill it sometimes ...
-        return Splitter.new(receiver1,receiver2);
-        })
-      .then(instance => {splitterInstance = instance;} );
+    return Promise.all([
+      web3.eth.getBalancePromise(receiver1),
+      web3.eth.getBalancePromise(receiver2),
+      Splitter.new(receiver1,receiver2)
+    ])
+    .then(result => {
+      receiver1InitialBalance=result[0];
+      receiver2InitialBalance=result[1];
+      splitterInstance =result[2];
+    });
   });
 
   it("it should failed to split 3 wei into 2 parts. ", function() {
@@ -164,19 +127,13 @@ describe("Irregular actions", function() {
   it("it should failed to call split after the owner have kill the contract", function() {
 
           return splitterInstance.kill({from:owner, gas: 3000000 })
-          .then(txSent => {
-            return web3.eth.getTransactionReceiptMined(txSent.tx);
-          })
           .then(txMined => {
-             assert.isBelow(txMined.gasUsed, 3000000, "should not use all gas");
+             assert.isBelow(txMined.receipt.gasUsed, 3000000, "should not use all gas");
              return splitterInstance.split({from:owner,value:4, gas: 3000000});
-          })
-          .then(txSent => {
-            return web3.eth.getTransactionReceiptMined(txSent.tx);
           })
           .then(txMined => {
                //Why assert below is true ??? i expected all gaz was used in the split call of a dead conctract
-               assert.isBelow(txMined.gasUsed, 3000000, "should not use all gas");
+               assert.isBelow(txMined.receipt.gasUsed, 3000000, "should not use all gas");
                return Promise.all([
                  web3.eth.getBalancePromise(receiver1),
                  web3.eth.getBalancePromise(receiver2)

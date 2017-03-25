@@ -7,7 +7,7 @@ import "../contracts/Remittance.sol";
 contract TestRemittance {
 
   function testInitialStateOfTheContract() {
-    Remittance meta = new Remittance(address(1));
+    Remittance meta = new Remittance(address(1),60);
     Assert.equal(meta.giver(), address(1), "giver must be assigned");
     Assert.equal(meta.receiver(), 0, "receiver not unassigned yet");
   }

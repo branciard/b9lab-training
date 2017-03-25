@@ -1,8 +1,7 @@
 pragma solidity ^0.4.4;
 import 'zeppelin/lifecycle/Killable.sol';
-import './Mutex.sol';
 
-contract Splitter is Killable, Mutex{
+contract Splitter is Killable{
 
   address public receiver1;
   address public receiver2;
@@ -40,7 +39,7 @@ contract Splitter is Killable, Mutex{
      receiver2 = _receiver2;
   }
 
-  function split() payable onlyOwner noReentrancy onlySplittableValue(msg.value / 2) returns (bool)  {
+  function split() payable onlyOwner onlySplittableValue(msg.value / 2) returns (bool)  {
     if(msg.value > 0){
 
       splittedValue = msg.value / 2;

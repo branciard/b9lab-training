@@ -1,6 +1,7 @@
 // credit to : https://github.com/coldice/dbh-b9lab-hackathon/blob/development/truffle/utils/extensions.js
 module.exports = {
 
+
     init: function (web3, assert) {
         // From https://gist.github.com/xavierlepretre/88682e871f4ad07be4534ae560692ee6
         web3.eth.getTransactionReceiptMined = function (txnHash, interval) {
@@ -196,5 +197,37 @@ module.exports = {
                 }));
         });
         return Promise.all(requests);
+    },
+
+    gazTxUsedCost: function (txMined) {
+        var gazUsed=txMined.receipt.gasUsed;
+        return web3.eth.getTransactionPromise(txMined.tx)
+        .then( tx => (tx.gasPrice * gazUsed ));
+    },
+
+    refillAccount: function(giver,receiver,minimalEtherNeeded){
+        return web3.eth.getBalancePromise(receiver)
+        .then(balance => {
+              if(balance.lessThan(web3.toWei(web3.toBigNumber(minimalEtherNeeded), "ether"))){
+                  return web3.eth.sendTransactionPromise({
+                      from: giver,
+                      to: receiver,
+                      value: web3.toWei(web3.toBigNumber(minimalEtherNeeded), "ether")
+                  });
+              }
+         })
+         .then( txSent =>  {
+            if(txSent){
+              return web3.eth.getTransactionReceiptMined(txSent);
+            }
+          })
+         .then( txMined =>  {
+            if(txMined){
+              console.log("refill "+web3.toBigNumber(minimalEtherNeeded)+" ether to "+receiver);
+           }
+          }
+        );
+
     }
+
 };

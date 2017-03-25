@@ -10,13 +10,18 @@ contract Remittance is Killable, Mutex {
   address public receiver;
   bytes32 private resolvedMe;
   uint private challengeTimeout;
+  uint private challengeMaxTimeout;
 
-  function Remittance (address _giver) {
+  function Remittance (address _giver,uint _challengeMaxTimeout) {
     //check not null address
     if (_giver == address(0)){
       throw;
     }
+    if (_challengeMaxTimeout == 0){
+      throw;
+    }
     giver=_giver;
+    challengeMaxTimeout=_challengeMaxTimeout;
     currentRemittanceState =RemittanceState.noGiverChallenge;
   }
 
@@ -36,8 +41,7 @@ contract Remittance is Killable, Mutex {
       if (_receiver == owner){
         throw;
       }
-      //max time for a chalenge is 1 week
-      if ( _timeForResolvingchallenge >= 1 weeks) {
+      if ( _timeForResolvingchallenge >= challengeMaxTimeout) {
         throw;
       }
       if ( _timeForResolvingchallenge  == 0) {
@@ -67,19 +71,18 @@ contract Remittance is Killable, Mutex {
     if ( now <= challengeTimeout) {
       throw;
     }
-    else{
-      currentRemittanceState =RemittanceState.noGiverChallenge;
 
-      //make you, the owner of the contract, take a cut of the Ethers smaller than what it would cost Alice to deploy the same contract without (you) any fee
-      //TODO cost of the deploy
+    currentRemittanceState =RemittanceState.noGiverChallenge;
 
-      if (! giver.send(this.balance)){
-        throw;
-      }
+    //make you, the owner of the contract, take a cut of the Ethers smaller than what it would cost Alice to deploy the same contract without (you) any fee
+    //TODO cost of the deploy
+
+    if (! giver.send(this.balance)){
+      throw;
     }
   }
 
-  function resolvedchallenge( string password1,  string password2 ) noReentrancy  {
+  function resolvedchallenge( string /* use bytes32  when possible =>cheaper than string*/ password1, string password2  ) noReentrancy  {
     if (currentRemittanceState !=  RemittanceState.giverChallengeProcessing){
       throw;
     }
@@ -88,7 +91,7 @@ contract Remittance is Killable, Mutex {
     }
     if(sha3(password1,password2) == resolvedMe ){
       //check timout ?
-      if ( now < challengeTimeout) {
+      if ( now <= challengeTimeout) {
         //change state before sending money. even if already secured by noReentrancy modifier
         currentRemittanceState =RemittanceState.noGiverChallenge;
 

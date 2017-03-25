@@ -7,6 +7,7 @@ Extensions.init(web3, assert);
 contract('Remittance', function(accounts) {
 
   var owner, giver, receiver, othersAccounts;
+  var oneWeek=1*60*60*24*7;
 
     before("should prepare accounts", function() {
         assert.isAtLeast(accounts.length, 3, "should have at least 3 accounts");
@@ -21,80 +22,9 @@ contract('Remittance', function(accounts) {
                           web3.toWei(web3.toBigNumber(40), "ether").lessThan(balance),
                           "owner should have at least 40 ether, not " + web3.fromWei(balance, "ether"))
                 )
-                .then(() =>  web3.eth.getBalancePromise(giver))
-                .then(balance => {
-                    if(balance.lessThan(web3.toWei(web3.toBigNumber(10), "ether"))){
-                        return web3.eth.sendTransactionPromise({
-                            from: owner,
-                            to: giver,
-                            value: web3.toWei(web3.toBigNumber(10), "ether")
-                        });
-                    }
-               })
-               .then( txSent =>  {
-                  // if sendTransactionPromise has been call. sent wait for mining
-                  if(txSent){
-                    return web3.eth.getTransactionReceiptMined(txSent);
-                  }
-                })
-                .then(txMined=> {
-                  // check that giver balance is now OK
-                  return web3.eth.getBalancePromise(giver)
-                })
-                .then(balance => assert.isTrue(
-                        web3.toWei(web3.toBigNumber(9.99), "ether").lessThan(balance),
-                        "giver should have at least 10 ether, not " + web3.fromWei(balance, "ether"))
-                )
-                .then(() =>  web3.eth.getBalancePromise(receiver))
-                .then(balance => {
-                  //check if has 1 ether. if not sent 1 to him
-                    if(balance.lessThan(web3.toWei(web3.toBigNumber(10), "ether"))){
-                        return web3.eth.sendTransactionPromise({
-                            from: owner,
-                            to: receiver,
-                            value: web3.toWei(web3.toBigNumber(10), "ether")
-                        });
-                    }
-               })
-               .then( txSent =>  {
-                  // if sendTransactionPromise has been call. sent wait for mining
-                  if(txSent){
-                    return web3.eth.getTransactionReceiptMined(txSent);
-                  }
-                })
-                .then(txMined=> {
-                  // check that receiver2 balance is now OK
-                  return web3.eth.getBalancePromise(receiver)
-                })
-                .then(balance => assert.isTrue(
-                        web3.toWei(web3.toBigNumber(9.99), "ether").lessThan(balance),
-                        "receiver should have at least 10 ether, not " + web3.fromWei(balance, "ether"))
-                )
-                .then(() =>  web3.eth.getBalancePromise(othersAccounts))
-                .then(balance => {
-                  //check if has 1 ether. if not sent 1 to him
-                    if(balance.lessThan(web3.toWei(web3.toBigNumber(10), "ether"))){
-                        return web3.eth.sendTransactionPromise({
-                            from: owner,
-                            to: othersAccounts,
-                            value: web3.toWei(web3.toBigNumber(10), "ether")
-                        });
-                    }
-               })
-               .then( txSent =>  {
-                  // if sendTransactionPromise has been call. sent wait for mining
-                  if(txSent){
-                    return web3.eth.getTransactionReceiptMined(txSent);
-                  }
-                })
-                .then(txMined=> {
-                  // check that othersAccounts balance is now OK
-                  return web3.eth.getBalancePromise(othersAccounts)
-                })
-                .then(balance => assert.isTrue(
-                        web3.toWei(web3.toBigNumber(9.99), "ether").lessThan(balance),
-                        "receiver should have at least 10 ether, not " + web3.fromWei(balance, "ether"))
-                );
+                .then(() => Extensions.refillAccount(owner,giver,10))
+                .then(() => Extensions.refillAccount(owner,receiver,10))
+                .then(() => Extensions.refillAccount(owner,othersAccounts,10));
     });
 
   describe("Test Inital noGiverChallenge state", function() {
@@ -103,22 +33,18 @@ contract('Remittance', function(accounts) {
     var giverInitialBalance;
     var receiverInitialBalance;
 
-
     beforeEach("should collect giver and receiver intial balance and create a new instance", function() {
-        return web3.eth.getBalancePromise(giver)
-        .then(balance => {
-             giverInitialBalance =balance;
-             return web3.eth.getBalancePromise(receiver);
-          })
-        .then(balance => {
-          receiverInitialBalance=balance;
-          //new Remittance instance created each time. because some test should kill it sometimes ...
-          return Remittance.new(giver);
-          })
-        .then(instance => {remittanceInstance = instance;} );
+      return Promise.all([
+        web3.eth.getBalancePromise(giver),
+        web3.eth.getBalancePromise(receiver),
+        Remittance.new(giver,oneWeek)
+      ])
+      .then(result => {
+        giverInitialBalance=result[0];
+        receiverInitialBalance=result[1];
+        remittanceInstance =result[2];
+      });
     });
-
-
 
     it("contract should have intial state equal to noGiverChallenge", function() {
          return remittanceInstance.currentRemittanceState.call()
@@ -221,9 +147,8 @@ contract('Remittance', function(accounts) {
         receiver,
         86400  ,//86400 sec = 1 day
         {from:giver,value:4})
-      .then(txSent => web3.eth.getTransactionReceiptMined(txSent.tx))
       .then(txMined => {
-          assert.isBelow(txMined.gasUsed, 3000000, "should not use all gas");
+          assert.isBelow(txMined.receipt.gasUsed, 3000000, "should not use all gas");
           return remittanceInstance.currentRemittanceState.call();
       })
       .then(currentRemittanceStateCall => {
@@ -346,9 +271,8 @@ contract('Remittance', function(accounts) {
 
     it("At this noGiverChallenge state,it should not failed to call kill function with owner ", function() {
               return remittanceInstance.kill({from:owner, gas: 3000000 })
-              .then(txSent => web3.eth.getTransactionReceiptMined(txSent.tx))
               .then(txMined => {
-                  assert.isBelow(txMined.gasUsed, 3000000, "should not use all gas");
+                  assert.isBelow(txMined.receipt.gasUsed, 3000000, "should not use all gas");
               });
     });
 
@@ -385,25 +309,23 @@ contract('Remittance', function(accounts) {
 
 
     beforeEach("should collect giver and receiver intial balance and create a new instance", function() {
-        return web3.eth.getBalancePromise(giver)
-        .then(balance => {
-             giverInitialBalance =balance;
-             return web3.eth.getBalancePromise(receiver);
-          })
-        .then(balance => {
-          receiverInitialBalance=balance;
-          //new Remittance instance created each time. because some test should kill it sometimes ...
-          return Remittance.new(giver);
-          })
-        .then(instance => {remittanceInstance = instance;})
+      return Remittance.new(giver,oneWeek)
+        .then(result => remittanceInstance =result)
         .then(()=>remittanceInstance.launchChallenge(
           web3.sha3("No problem can be solved from the same level of consciousness that created it."),
           receiver,
           5  ,//5 seconds
           {from:giver,value:4})
         )
-        .then(txSent => web3.eth.getTransactionReceiptMined(txSent.tx))
-        .then(txMined => assert.isBelow(txMined.gasUsed, 3000000, "should not use all gas"));
+        .then(txMined => assert.isBelow(txMined.receipt.gasUsed, 3000000, "should not use all gas"))
+        .then(()=> Promise.all([
+           web3.eth.getBalancePromise(giver),
+           web3.eth.getBalancePromise(receiver),
+         ]))
+        .then(balance => {
+          giverInitialBalance=balance[0];
+          receiverInitialBalance=balance[1];
+        });
     });
 
 
@@ -483,17 +405,25 @@ contract('Remittance', function(accounts) {
           "No problem can be solved ",
           "from the same level of consciousness that created it.",
           {from:receiver, gas: 3000000})
-        .then(txSent => web3.eth.getTransactionReceiptMined(txSent.tx))
         .then(txMined => {
-            assert.isBelow(txMined.gasUsed, 3000000, "should not use all gas");
-            return remittanceInstance.currentRemittanceState.call();
+            assert.isBelow(txMined.receipt.gasUsed, 3000000, "should not use all gas");
+            return Promise.all([
+            web3.eth.getBalancePromise(receiver),
+            web3.eth.getBalancePromise(remittanceInstance.address),
+            Extensions.gazTxUsedCost(txMined)
+            ]);
         })
-        .then(currentRemittanceStateCall => {
-            assert.strictEqual(currentRemittanceStateCall.toString(10),"0","should have go back in noGiverChallenge state (enum RemittanceState giverChallengeProcessing = 0)");
-            return web3.eth.getBalancePromise(remittanceInstance.address);
-        })
-        //TODO add assert of receiver balance when you understant the gaz calculus
-        .then( balance  => assert.strictEqual(balance.toString(10), '0', "receiver solve the problem receive money so nothing left in the contract now"));
+        .then( currentBalancesAndTx  => {
+             receiverCurrentBalance = currentBalancesAndTx[0];
+             contractCurrentBalance = currentBalancesAndTx[1];
+             gazUsedCost= currentBalancesAndTx[2];
+             initialBalanceMinusGazUsed=new BigNumber(receiverInitialBalance.minus(gazUsedCost));
+             assert.strictEqual(receiverCurrentBalance.minus(initialBalanceMinusGazUsed).toString(10), '4' , "receiver resolve challenge must receive 4");
+             assert.strictEqual(contractCurrentBalance.toString(10), '0', "receiver solve the problem receive money so nothing left in the contract now");
+           }
+        )
+        .then(() =>remittanceInstance.currentRemittanceState.call())
+        .then(currentRemittanceStateCall => assert.strictEqual(currentRemittanceStateCall.toString(10),"0","should have go back in noGiverChallenge state (enum RemittanceState giverChallengeProcessing = 0)"));
     });
 
     it("At this giverChallengeProcessing state, giver can't call resolvedchallenge ", function() {
@@ -531,19 +461,24 @@ contract('Remittance', function(accounts) {
                    "No problem can be solved ",
                    "At all !", //wrong msg
                    {from:receiver, gas: 3000000})
-       .then(txSent => web3.eth.getTransactionReceiptMined(txSent.tx))
        .then(txMined => {
-           assert.isBelow(txMined.gasUsed, 3000000, "should not use all gas");
-           return remittanceInstance.currentRemittanceState.call();
+           assert.isBelow(txMined.receipt.gasUsed, 3000000, "should not use all gas");
+           return Promise.all([
+             web3.eth.getBalancePromise(receiver),
+             web3.eth.getBalancePromise(remittanceInstance.address),
+             Extensions.gazTxUsedCost(txMined)
+             ]);
+         })
+         .then( currentBalancesAndTx  => {
+              receiverCurrentBalance = currentBalancesAndTx[0];
+              contractCurrentBalance = currentBalancesAndTx[1];
+              gazUsedCost= currentBalancesAndTx[2];
+              initialBalanceMinusGazUsed=new BigNumber(receiverInitialBalance.minus(gazUsedCost));
+              assert.strictEqual(receiverCurrentBalance.minus(initialBalanceMinusGazUsed).toString(10), '0' , "receiver resolve challenge must receive nothing");
+              assert.strictEqual(contractCurrentBalance.toString(10), '4', "challenge still open.there is still the 4 in the contract");
        })
-       .then(currentRemittanceStateCall => {
-           assert.strictEqual(currentRemittanceStateCall.toString(10),"1","must be in the same  giverChallengeProcessing state (enum RemittanceState giverChallengeProcessing = 1)");
-           return web3.eth.getBalancePromise(remittanceInstance.address);
-       })
-       .then( balance  => {
-          assert.strictEqual(balance.toString(10), '4', "challenge still open.there is still the 4 in the contract");
-         // TODO check receiver balance when gaz used gaz price understand
-       });
+       .then(()=> remittanceInstance.currentRemittanceState.call())
+       .then(currentRemittanceStateCall =>assert.strictEqual(currentRemittanceStateCall.toString(10),"1","must be in the same  giverChallengeProcessing state (enum RemittanceState giverChallengeProcessing = 1)"));
     });
 
    it("At this giverChallengeProcessing state, receiver was too late resolve the challenge (5 seconds challenge)", function() {
@@ -558,19 +493,24 @@ contract('Remittance', function(accounts) {
                    "No problem can be solved ",
                    "from the same level of consciousness that created it.",
                    {from:receiver, gas: 3000000})
-       .then(txSent => web3.eth.getTransactionReceiptMined(txSent.tx))
-       .then(txMined => {
-           assert.isBelow(txMined.gasUsed, 3000000, "should not use all gas");
-           return remittanceInstance.currentRemittanceState.call();
-       })
-       .then(currentRemittanceStateCall => {
-           assert.strictEqual(currentRemittanceStateCall.toString(10),"1","must be in the same  giverChallengeProcessing state (enum RemittanceState giverChallengeProcessing = 1)");
-           return web3.eth.getBalancePromise(remittanceInstance.address);
-       })
-       .then( balance  => {
-          assert.strictEqual(balance.toString(10), '4', "challenge still open.there is still the 4 in the contract");
-         // TODO check receiver balance when gaz used gaz price understand
-       });
+         .then(txMined => {
+             assert.isBelow(txMined.receipt.gasUsed, 3000000, "should not use all gas");
+             return Promise.all([
+               web3.eth.getBalancePromise(receiver),
+               web3.eth.getBalancePromise(remittanceInstance.address),
+               Extensions.gazTxUsedCost(txMined)
+               ]);
+           })
+           .then( currentBalancesAndTx  => {
+                receiverCurrentBalance = currentBalancesAndTx[0];
+                contractCurrentBalance = currentBalancesAndTx[1];
+                gazUsedCost= currentBalancesAndTx[2];
+                initialBalanceMinusGazUsed=new BigNumber(receiverInitialBalance.minus(gazUsedCost));
+                assert.strictEqual(receiverCurrentBalance.minus(initialBalanceMinusGazUsed).toString(10), '0' , "receiver resolve challenge must receive nothing");
+                assert.strictEqual(contractCurrentBalance.toString(10), '4', "challenge still open.there is still the 4 in the contract");
+         })
+         .then(() => remittanceInstance.currentRemittanceState.call())
+         .then(currentRemittanceStateCall => assert.strictEqual(currentRemittanceStateCall.toString(10),"1","must be in the same  giverChallengeProcessing state (enum RemittanceState giverChallengeProcessing = 1)"));
      });
 
 
@@ -583,19 +523,24 @@ contract('Remittance', function(accounts) {
           }
 
         return remittanceInstance.claimBackChallenge({from:giver, gas: 3000000})
-        .then(txSent => web3.eth.getTransactionReceiptMined(txSent.tx))
         .then(txMined => {
-            assert.isBelow(txMined.gasUsed, 3000000, "should not use all gas");
-            return remittanceInstance.currentRemittanceState.call();
+            assert.isBelow(txMined.receipt.gasUsed, 3000000, "should not use all gas");
+            return  Promise.all([
+                  web3.eth.getBalancePromise(giver),
+                  web3.eth.getBalancePromise(remittanceInstance.address),
+                  Extensions.gazTxUsedCost(txMined)
+              ]);;
         })
-        .then(currentRemittanceStateCall => {
-            assert.strictEqual(currentRemittanceStateCall.toString(10),"0","should have go back in noGiverChallenge state (enum RemittanceState giverChallengeProcessing = 0)");
-            return web3.eth.getBalancePromise(remittanceInstance.address);
+        .then( currentBalancesAndTx  => {
+           giverCurrentBalance = currentBalancesAndTx[0];
+           contractCurrentBalance = currentBalancesAndTx[1];
+           gazUsedCost= currentBalancesAndTx[2];
+           initialBalanceMinusGazUsed=new BigNumber(giverInitialBalance.minus(gazUsedCost));
+           assert.strictEqual(giverCurrentBalance.minus(initialBalanceMinusGazUsed).toString(10), '4' , "giver should obtain 4 by claimBack");
+           assert.strictEqual(contractCurrentBalance.toString(10), '0', "giver have withdrow the 4 by calling claimBackChallenge");
         })
-        .then( balance  => {
-           assert.strictEqual(balance.toString(10), '0', "giver have withdrow the 4 by calling claimBackChallenge");
-          // TODO check giver balance when gaz used gaz price understand
-        });
+        .then(() => remittanceInstance.currentRemittanceState.call())
+        .then(currentRemittanceStateCall =>   assert.strictEqual(currentRemittanceStateCall.toString(10),"0","should have go back in noGiverChallenge state (enum RemittanceState giverChallengeProcessing = 0)"));
    });
 
    it("At this giverChallengeProcessing state, giver can't call immediatly claimBackChallenge for a timeout challenge set to 5 seconds", function() {

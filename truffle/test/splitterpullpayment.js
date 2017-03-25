@@ -21,57 +21,8 @@ contract('SplitterPullPayment', function(accounts) {
                           web3.toWei(web3.toBigNumber(3), "ether").lessThan(balance),
                           "owner should have at least 3 ether, not " + web3.fromWei(balance, "ether"))
                 )
-                .then(() =>  web3.eth.getBalancePromise(receiver1))
-                // give some ether to receiver1 and 2 needed for gaz for PullPayment call
-                .then(balance => {
-                  //check if has 1 ether. if not sent 1 to him
-                    if(balance.lessThan(web3.toWei(web3.toBigNumber(1), "ether"))){
-                        return web3.eth.sendTransactionPromise({
-                            from: owner,
-                            to: receiver1,
-                            value: web3.toWei(web3.toBigNumber(1), "ether")
-                        });
-                    }
-               })
-               .then( txSent =>  {
-                  // if sendTransactionPromise has been call. sent wait for mining
-                  if(txSent){
-                    return web3.eth.getTransactionReceiptMined(txSent);
-                  }
-                })
-                .then(txMined=> {
-                  // check that receiver1 balance is now OK
-                  return web3.eth.getBalancePromise(receiver1)
-                })
-                .then(balance => assert.isTrue(
-                        web3.toWei(web3.toBigNumber(0.99), "ether").lessThan(balance),
-                        "receiver1 should have at least 1 ether, not " + web3.fromWei(balance, "ether"))
-                )
-                .then(() =>  web3.eth.getBalancePromise(receiver2))
-                .then(balance => {
-                  //check if has 1 ether. if not sent 1 to him
-                    if(balance.lessThan(web3.toWei(web3.toBigNumber(1), "ether"))){
-                        return web3.eth.sendTransactionPromise({
-                            from: owner,
-                            to: receiver2,
-                            value: web3.toWei(web3.toBigNumber(1), "ether")
-                        });
-                    }
-               })
-               .then( txSent =>  {
-                  // if sendTransactionPromise has been call. sent wait for mining
-                  if(txSent){
-                    return web3.eth.getTransactionReceiptMined(txSent);
-                  }
-                })
-                .then(txMined=> {
-                  // check that receiver2 balance is now OK
-                  return web3.eth.getBalancePromise(receiver2)
-                })
-                .then(balance => assert.isTrue(
-                        web3.toWei(web3.toBigNumber(0.99), "ether").lessThan(balance),
-                        "receiver1 should have at least 1 ether, not " + web3.fromWei(balance, "ether"))
-                );
+                .then(() => Extensions.refillAccount(owner,receiver1,1))
+                .then(() => Extensions.refillAccount(owner,receiver2,1));
     });
 
   describe("Regular actions", function() {
@@ -79,22 +30,18 @@ contract('SplitterPullPayment', function(accounts) {
     var splitterInstance;
     var receiver1InitialBalance;
     var receiver2InitialBalance;
-    var blocknumber;
-    var gazUsedByRreceiver1;
-    var gazUsedByRreceiver2;
 
     beforeEach("should collect user 1 and user 2 intial balance and create a new instance", function() {
-        return web3.eth.getBalancePromise(receiver1)
-        .then(balance => {
-             receiver1InitialBalance =balance;
-             return web3.eth.getBalancePromise(receiver2);
-          })
-        .then(balance => {
-          receiver2InitialBalance=balance;
-          //new Splitter instance created each time. because some test should kill it sometimes ...
-          return SplitterPullPayment.new(receiver1,receiver2);
-          })
-        .then(instance => {splitterInstance = instance;} );
+        return Promise.all([
+          web3.eth.getBalancePromise(receiver1),
+          web3.eth.getBalancePromise(receiver2),
+          SplitterPullPayment.new(receiver1,receiver2)
+        ])
+        .then(result => {
+          receiver1InitialBalance=result[0];
+          receiver2InitialBalance=result[1];
+          splitterInstance =result[2];
+        });
     });
 
     it("contract should have 0 balance at start", function() {
@@ -106,25 +53,15 @@ contract('SplitterPullPayment', function(accounts) {
         return splitterInstance.split.call({from:owner,value:4})
         .then(successful => {
           assert.isTrue(successful, "should be possible to call split");
-          //needed for split event filter
-          blocknumber = web3.eth.blocknumber +1;
           return splitterInstance.split({from:owner,value:4, gas: 3000000});
         })
-        .then(txSent => {
-          return Promise.all([
-             Extensions.getEventsPromise(splitterInstance.LogSplit({},{fromBlock:blocknumber,toBlock:"latest"})),
-             web3.eth.getTransactionReceiptMined(txSent.tx),
-            ]);
-        })
-       .then(txMinedAndEventFiltered => {
-          eventFiltered =txMinedAndEventFiltered[0];
-          txMined= txMinedAndEventFiltered[1];
-          assert.isBelow(txMined.gasUsed, 3000000, "should not use all gas");
+       .then(txMined => {
+          assert.isBelow(txMined.receipt.gasUsed, 3000000, "should not use all gas");
           //check LogSplit event
-          assert.strictEqual(eventFiltered[0].args.amountReceive.valueOf(),'2', "check amountReceivelog log event. must be 2");
-          assert.strictEqual(eventFiltered[0].args.sender,owner, "check sender log event. must be the owner");
-          assert.strictEqual(eventFiltered[0].args.receiver1,receiver1, "check receiver1 log event");
-          assert.strictEqual(eventFiltered[0].args.receiver2,receiver2, "check receiver2 log event");
+          assert.strictEqual(txMined.logs[0].args.amountReceive.valueOf(),'2', "check amountReceivelog log event. must be 2");
+          assert.strictEqual(txMined.logs[0].args.sender,owner, "check sender log event. must be the owner");
+          assert.strictEqual(txMined.logs[0].args.receiver1,receiver1, "check receiver1 log event");
+          assert.strictEqual(txMined.logs[0].args.receiver2,receiver2, "check receiver2 log event");
           return Promise.all([
   	    		web3.eth.getBalancePromise(receiver1),
   	    		web3.eth.getBalancePromise(receiver2),
@@ -140,57 +77,48 @@ contract('SplitterPullPayment', function(accounts) {
            assert.strictEqual(splitterInstanceCurrentBalance.toString(10), '4', "contract should have the 4 balance. waiting for receivers pull ...");
            return splitterInstance.withdrawPayments({from:receiver1, gas: 3000000});
        })
-       .then(txSent => web3.eth.getTransactionReceiptMined(txSent.tx))
        .then(txMined => {
-           gazUsedByRreceiver1=txMined.gasUsed;
-           assert.isBelow(gazUsedByRreceiver1, 3000000, "should not use all gas");
+           assert.isBelow(txMined.receipt.gasUsed, 3000000, "should not use all gas");
            return Promise.all([
    	    		web3.eth.getBalancePromise(receiver1),
    	    		web3.eth.getBalancePromise(receiver2),
-             web3.eth.getBalancePromise(splitterInstance.address)
+            web3.eth.getBalancePromise(splitterInstance.address),
+            Extensions.gazTxUsedCost(txMined)
        		]);
        })
-       .then(currentBalance => {
-           receiver1CurrentBalance=currentBalance[0];
-           receiver2CurrentBalance=currentBalance[1];
-           splitterInstanceCurrentBalance=currentBalance[2];
-           gasPriceBigNumber = new BigNumber(web3.eth.gasPrice);
-           gazUsedByRreceiver1BigNumber = new BigNumber(gazUsedByRreceiver1);
-           gazUsedCost= new BigNumber(gasPriceBigNumber * gazUsedByRreceiver1BigNumber );
+       .then(currentBalancesAndTx => {
+           receiver1CurrentBalance=currentBalancesAndTx[0];
+           receiver2CurrentBalance=currentBalancesAndTx[1];
+           splitterInstanceCurrentBalance=currentBalancesAndTx[2];
+           gazUsedCost= currentBalancesAndTx[3];
            initialBalanceMinusGazUsed=new BigNumber(receiver1InitialBalance.minus(gazUsedCost));
-           // WHY the next assert failed ??:
-        //   assert.strictEqual(receiver1CurrentBalance.minus(initialBalanceMinusGazUsed).toString(10), '2' , "receiver1 has  pull . his balance receive 2 (- gazused)");
+           assert.strictEqual(receiver1CurrentBalance.minus(initialBalanceMinusGazUsed).toString(10), '2' , "receiver1 has  pull . his balance receive 2 (- gazused)");
            assert.strictEqual(receiver2CurrentBalance.toString(10), receiver2InitialBalance.toString(10) , "receiver2 has not pull yet. his balance must be unchanged");
            assert.strictEqual(splitterInstanceCurrentBalance.toString(10), '2', "contract should have the half balance 2. waiting for receiver 2 to pull ...");
            return splitterInstance.withdrawPayments({from:receiver2, gas: 3000000});
         })
-        .then(txSent => web3.eth.getTransactionReceiptMined(txSent.tx))
         .then(txMined => {
-            gazUsedByRreceiver2=txMined.gasUsed;
-            assert.isBelow(gazUsedByRreceiver2, 3000000, "should not use all gas");
+            assert.isBelow(txMined.receipt.gasUsed, 3000000, "should not use all gas");
             return Promise.all([
              web3.eth.getBalancePromise(receiver2),
-              web3.eth.getBalancePromise(splitterInstance.address)
+             web3.eth.getBalancePromise(splitterInstance.address),
+             Extensions.gazTxUsedCost(txMined)
            ]);
         })
-        .then(currentBalance => {
-            receiver2CurrentBalance=currentBalance[0];
-            splitterInstanceCurrentBalance=currentBalance[1];
-            gasPriceBigNumber = new BigNumber(web3.eth.gasPrice);
-            gazUsedByRreceiver2BigNumber = new BigNumber(gazUsedByRreceiver2);
-            gazUsedCost= new BigNumber(gasPriceBigNumber * gazUsedByRreceiver2BigNumber );
+        .then(currentBalancesAndTx => {
+            receiver2CurrentBalance=currentBalancesAndTx[0];
+            splitterInstanceCurrentBalance=currentBalancesAndTx[1];
+            gazUsedCost= currentBalancesAndTx[2];
             initialBalanceMinusGazUsed=new BigNumber(receiver2InitialBalance.minus(gazUsedCost));
-            // WHY the next assert failed ??:
-            //assert.strictEqual(receiver2CurrentBalance.minus(initialBalanceMinusGazUsed).toString(10), '2', "receiver2 has  pull . his balance receive 2 (- gazused)");
+            assert.strictEqual(receiver2CurrentBalance.minus(initialBalanceMinusGazUsed).toString(10), '2', "receiver2 has  pull . his balance receive 2 (- gazused)");
             assert.strictEqual(splitterInstanceCurrentBalance.toString(10), '0', " both receiver 1 and 2 have pull. contract balance must be 0");
          });
     });
 
     it("it should not failed to call kill function with owner ", function() {
           return splitterInstance.kill({from:owner, gas: 3000000 })
-          .then(txSent => web3.eth.getTransactionReceiptMined(txSent.tx))
           .then(txMined => {
-              assert.isBelow(txMined.gasUsed, 3000000, "should not use all gas");
+              assert.isBelow(txMined.receipt.gasUsed, 3000000, "should not use all gas");
           });
     });
 });
@@ -201,17 +129,16 @@ describe("Irregular actions", function() {
   var receiver2InitialBalance;
 
   beforeEach("should collect user 1 and user 2 intial balance and create a new instance", function() {
-      return web3.eth.getBalancePromise(receiver1)
-      .then(balance => {
-           receiver1InitialBalance =balance;
-           return web3.eth.getBalancePromise(receiver2);
-        })
-      .then(balance => {
-        receiver2InitialBalance=balance;
-        //new Splitter instance created each time. because some test should kill it sometimes ...
-        return SplitterPullPayment.new(receiver1,receiver2);
-        })
-      .then(instance => {splitterInstance = instance;} );
+    return Promise.all([
+      web3.eth.getBalancePromise(receiver1),
+      web3.eth.getBalancePromise(receiver2),
+      SplitterPullPayment.new(receiver1,receiver2)
+    ])
+    .then(result => {
+      receiver1InitialBalance=result[0];
+      receiver2InitialBalance=result[1];
+      splitterInstance =result[2];
+    });
   });
 
   it("it should failed to split 3 wei into 2 parts. ", function() {
@@ -238,15 +165,13 @@ describe("Irregular actions", function() {
   it("it should failed to call split after the owner have kill the contract", function() {
 
           return splitterInstance.kill({from:owner, gas: 3000000 })
-          .then(txSent => web3.eth.getTransactionReceiptMined(txSent.tx))
           .then(txMined => {
-             assert.isBelow(txMined.gasUsed, 3000000, "should not use all gas");
+             assert.isBelow(txMined.receipt.gasUsed, 3000000, "should not use all gas");
              return splitterInstance.split({from:owner,value:4, gas: 3000000});
           })
-          .then(txSent => web3.eth.getTransactionReceiptMined(txSent.tx))
           .then(txMined => {
                //Why assert below is true ??? i expected all gaz was used in the split call of a dead conctract
-               assert.isBelow(txMined.gasUsed, 3000000, "should not use all gas");
+               assert.isBelow(txMined.receipt.gasUsed, 3000000, "should not use all gas");
                return Promise.all([
                  web3.eth.getBalancePromise(receiver1),
                  web3.eth.getBalancePromise(receiver2)
@@ -284,19 +209,17 @@ describe("Irregular actions", function() {
     var splitterInstance;
 
     beforeEach("should collect user 1 and user 2 intial balance and create a new instance and call a valid split()", function() {
-        return web3.eth.getBalancePromise(receiver1)
-        .then(balance => {
-             receiver1InitialBalance =balance;
-             return web3.eth.getBalancePromise(receiver2);
-          })
-        .then(balance => {
-          receiver2InitialBalance=balance;
-          //new Splitter instance created each time. because some test should kill it sometimes ...
-          return SplitterPullPayment.new(receiver1,receiver2);
-          })
-        .then(instance => {splitterInstance = instance;})
+        return Promise.all([
+          web3.eth.getBalancePromise(receiver1),
+          web3.eth.getBalancePromise(receiver2),
+          SplitterPullPayment.new(receiver1,receiver2)
+        ])
+        .then(result => {
+          receiver1InitialBalance=result[0];
+          receiver2InitialBalance=result[1];
+          splitterInstance =result[2];
+        })
         .then(() => splitterInstance.split({from:owner,value:4, gas: 3000000}))
-        .then(txSent => web3.eth.getTransactionReceiptMined(txSent.tx))
         .then(txMined => web3.eth.getBalancePromise(splitterInstance.address))
         .then(balance => assert.strictEqual(balance.toString(10), '4', "contract must be load with 4 wei. Waiting to receiver 1 and 2 to pull" ));
     });
@@ -311,7 +234,6 @@ describe("Irregular actions", function() {
 
     it("it should failed when a receveir withdrow twice", function() {
         return splitterInstance.withdrawPayments({from:receiver1, gas: 3000000})
-        .then(txSent => web3.eth.getTransactionReceiptMined(txSent.tx))
         .then(txMined => web3.eth.getBalancePromise(splitterInstance.address))
         .then(balance => {
            assert.strictEqual(balance.toString(10), '2', "first withdrow must works" );
@@ -324,10 +246,8 @@ describe("Irregular actions", function() {
 
     it("it should failed to withdrow on a killed contract", function() {
             return splitterInstance.kill({from:owner, gas: 3000000 })
-            .then(txSent => web3.eth.getTransactionReceiptMined(txSent.tx))
             // withdrawPayments do not crash when using Extensions.expectedExceptionPromise. why ?
             .then(txMined =>splitterInstance.withdrawPayments({from:receiver1, gas: 3000000}))
-            .then(txSent => web3.eth.getTransactionReceiptMined(txSent.tx))
             .then(txMined => web3.eth.getBalancePromise(splitterInstance.address))
             .then(balance => {
                assert.strictEqual(balance.toString(10), '0', "killed contract has 0 balance" );

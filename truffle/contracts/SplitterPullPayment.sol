@@ -1,13 +1,14 @@
 pragma solidity ^0.4.4;
 import 'zeppelin/payment/PullPayment.sol';
 import './Splitter.sol';
-contract SplitterPullPayment is Splitter,PullPayment {
+import './Mutex.sol';
+contract SplitterPullPayment is Splitter,PullPayment, Mutex {
 
   function SplitterPullPayment ( address _receiver1, address _receiver2) Splitter (_receiver1,_receiver2) {
 
   }
 
-  function split() payable onlyOwner noReentrancy onlySplittableValue(msg.value / 2) returns (bool)  {
+  function split() payable onlyOwner onlySplittableValue(msg.value / 2) returns (bool)  {
 
     if(msg.value > 0){
       splittedValue = msg.value / 2;
