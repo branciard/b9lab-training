@@ -1,0 +1,23 @@
+{
+  "name": "vanilla",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "create-html": "^1.1.0",
+    "file-loader": "^0.11.1",
+    "truffle": "^3.2.1",
+    "webpack": "^2.3.3"
+  },
+  "dependencies": {
+    "bluebird": "^3.5.0",
+    "jquery": "^3.2.1",
+    "truffle-contract": "^2.0.0",
+    "web3": "^0.18.4"
+  }
+}
