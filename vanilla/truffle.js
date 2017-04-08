@@ -1,4 +1,5 @@
 module.exports = {
+  build: "./node_modules/.bin/webpack",
   networks: {
     development: {
       host: "localhost",
