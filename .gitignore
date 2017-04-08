@@ -1,1 +1,5 @@
 truffle/build/
+vanilla/build/
+vanilla/node_modules
+nontruffletest/build
+nontruffletest/node_modules
